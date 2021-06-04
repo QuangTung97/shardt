@@ -305,3 +305,262 @@ func TestPartitionStateLess(t *testing.T) {
 		})
 	}
 }
+
+func TestCombineNodeState(t *testing.T) {
+	table := []struct {
+		name     string
+		a        NodeState
+		b        NodeState
+		expected NodeState
+	}{
+		{
+			name: "both-empty",
+		},
+		{
+			name: "a-not-empty",
+			a: NodeState{
+				Term:    10,
+				Unix:    100,
+				Version: 20,
+				Status:  NodeStatusStopped,
+			},
+			expected: NodeState{
+				Term:    10,
+				Unix:    100,
+				Version: 20,
+				Status:  NodeStatusStopped,
+			},
+		},
+		{
+			name: "b-not-empty",
+			b: NodeState{
+				Term:    10,
+				Unix:    100,
+				Version: 20,
+				Status:  NodeStatusStopped,
+			},
+			expected: NodeState{
+				Term:    10,
+				Unix:    100,
+				Version: 20,
+				Status:  NodeStatusStopped,
+			},
+		},
+		{
+			name: "a < b",
+			a: NodeState{
+				Term:    10,
+				Unix:    100,
+				Version: 20,
+				Status:  NodeStatusStopped,
+			},
+			b: NodeState{
+				Term:    10,
+				Unix:    120,
+				Version: 20,
+				Status:  NodeStatusStopped,
+			},
+			expected: NodeState{
+				Term:    10,
+				Unix:    120,
+				Version: 20,
+				Status:  NodeStatusStopped,
+			},
+		},
+	}
+
+	for _, e := range table {
+		t.Run(e.name, func(t *testing.T) {
+			result := combineNodeState(e.a, e.b)
+			assert.Equal(t, e.expected, result)
+		})
+	}
+}
+
+func TestCombineNodeStates(t *testing.T) {
+	table := []struct {
+		name     string
+		a        map[string]NodeState
+		b        map[string]NodeState
+		expected map[string]NodeState
+	}{
+		{
+			name:     "both-empty",
+			expected: map[string]NodeState{},
+		},
+		{
+			name: "a-node-non-empty",
+			a: map[string]NodeState{
+				"addr1": {
+					Term:    10,
+					Unix:    100,
+					Version: 20,
+					Status:  NodeStatusOutOfSync,
+				},
+			},
+			expected: map[string]NodeState{
+				"addr1": {
+					Term:    10,
+					Unix:    100,
+					Version: 20,
+					Status:  NodeStatusOutOfSync,
+				},
+			},
+		},
+		{
+			name: "b-node-non-empty",
+			b: map[string]NodeState{
+				"addr1": {
+					Term:    10,
+					Unix:    100,
+					Version: 20,
+					Status:  NodeStatusOutOfSync,
+				},
+			},
+			expected: map[string]NodeState{
+				"addr1": {
+					Term:    10,
+					Unix:    100,
+					Version: 20,
+					Status:  NodeStatusOutOfSync,
+				},
+			},
+		},
+		{
+			name: "addr-both-a-bigger",
+			a: map[string]NodeState{
+				"addr1": {
+					Term:    10,
+					Unix:    120,
+					Version: 20,
+					Status:  NodeStatusOutOfSync,
+				},
+			},
+			b: map[string]NodeState{
+				"addr1": {
+					Term:    10,
+					Unix:    100,
+					Version: 20,
+					Status:  NodeStatusOutOfSync,
+				},
+			},
+			expected: map[string]NodeState{
+				"addr1": {
+					Term:    10,
+					Unix:    120,
+					Version: 20,
+					Status:  NodeStatusOutOfSync,
+				},
+			},
+		},
+	}
+
+	for _, e := range table {
+		t.Run(e.name, func(t *testing.T) {
+			result := combineNodeStates(e.a, e.b)
+			assert.Equal(t, e.expected, result)
+		})
+	}
+}
+
+func TestCombinePartitionState(t *testing.T) {
+	table := []struct {
+		name     string
+		a        PartitionState
+		b        PartitionState
+		expected PartitionState
+	}{
+		{
+			name: "both-empty",
+		},
+		{
+			name:     "a-term-bigger",
+			a:        PartitionState{Term: 12, Addr: "addr1"},
+			b:        PartitionState{Term: 10, Addr: "addr2"},
+			expected: PartitionState{Term: 12, Addr: "addr1"},
+		},
+		{
+			name:     "a-term-less",
+			a:        PartitionState{Term: 10, Addr: "addr2"},
+			b:        PartitionState{Term: 12, Addr: "addr1"},
+			expected: PartitionState{Term: 12, Addr: "addr1"},
+		},
+	}
+
+	for _, e := range table {
+		t.Run(e.name, func(t *testing.T) {
+			result := combinePartitionState(e.a, e.b)
+			assert.Equal(t, e.expected, result)
+		})
+	}
+}
+
+func TestCombineStates(t *testing.T) {
+	a := State{
+		Nodes: map[string]NodeState{
+			"addr1": {
+				Term:    10,
+				Unix:    100,
+				Version: 20,
+			},
+		},
+		Partitions: []PartitionState{
+			{
+				Term: 5,
+				Addr: "addr1",
+			},
+			{
+				Term: 6,
+				Addr: "addr3",
+			},
+		},
+	}
+
+	b := State{
+		Nodes: map[string]NodeState{
+			"addr2": {
+				Term:    30,
+				Unix:    200,
+				Version: 5,
+			},
+		},
+		Partitions: []PartitionState{
+			{
+				Term: 6,
+				Addr: "addr2",
+			},
+			{
+				Term: 3,
+				Addr: "addr4",
+			},
+		},
+	}
+
+	expected := State{
+		Nodes: map[string]NodeState{
+			"addr1": {
+				Term:    10,
+				Unix:    100,
+				Version: 20,
+			},
+			"addr2": {
+				Term:    30,
+				Unix:    200,
+				Version: 5,
+			},
+		},
+		Partitions: []PartitionState{
+			{
+				Term: 6,
+				Addr: "addr2",
+			},
+
+			{
+				Term: 6,
+				Addr: "addr3",
+			},
+		},
+	}
+
+	assert.Equal(t, expected, combineStates(a, b))
+}

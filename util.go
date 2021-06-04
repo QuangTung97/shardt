@@ -42,3 +42,44 @@ func partitionStateLess(a, b PartitionState) bool {
 
 	return a.Status < b.Status
 }
+
+func combineNodeState(a, b NodeState) NodeState {
+	if nodeStateLess(a, b) {
+		return b
+	}
+	return a
+}
+
+func combineNodeStates(a, b map[string]NodeState) map[string]NodeState {
+	result := map[string]NodeState{}
+	for addr, state := range a {
+		result[addr] = state
+	}
+	for addr, state := range b {
+		previous, existed := result[addr]
+		if !existed {
+			result[addr] = state
+		} else {
+			result[addr] = combineNodeState(previous, state)
+		}
+	}
+	return result
+}
+
+func combinePartitionState(a, b PartitionState) PartitionState {
+	if partitionStateLess(a, b) {
+		return b
+	}
+	return a
+}
+
+func combineStates(a, b State) State {
+	partitions := make([]PartitionState, len(a.Partitions))
+	for i, p := range a.Partitions {
+		partitions[i] = combinePartitionState(p, b.Partitions[i])
+	}
+	return State{
+		Nodes:      combineNodeStates(a.Nodes, b.Nodes),
+		Partitions: partitions,
+	}
+}
